@@ -1,0 +1,38 @@
+{
+  "name": "horner-tracker",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-01",
+
+  // The Worker serves the static app; anything not matching a file in
+  // ./public (i.e. /api/*) falls through to src/index.js.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  "observability": { "enabled": true },
+
+  "vars": {
+    // PBKDF2 cost. The Workers free plan allows 10ms of CPU per request, and
+    // 12,000 iterations measures around 6.4ms. Workers Paid lifts the ceiling
+    // to 30s, so set this to 310000 there. Raising it is safe at any time:
+    // every stored hash records the count it was created with.
+    "PBKDF2_ITERATIONS": "12000",
+    // Public Turnstile site key. Leave empty to run without a challenge.
+    // The matching secret is set with: wrangler secret put TURNSTILE_SECRET
+    "TURNSTILE_SITE_KEY": ""
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "horner-tracker",
+      // Replace with the id printed by: wrangler d1 create horner-tracker
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+    }
+  ]
+
+  // To serve on your own hostname, add the DNS record in Cloudflare, then
+  // uncomment and edit:
+  // ,"routes": [{ "pattern": "horner.example.com", "custom_domain": true }]
+}
