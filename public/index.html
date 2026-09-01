@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bible Reading Tracker</title>
+<meta name="description" content="Track your place in all ten lists of Professor Grant Horner's Bible-reading system.">
+<meta name="theme-color" content="#f7f2e8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17140f" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ten Lists">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<main id="app" hidden>
+  <header class="masthead">
+    <p class="eyebrow">Professor Grant Horner&rsquo;s</p>
+    <h1>Bible Reading System</h1>
+  </header>
+
+  <div id="lists" class="lists"></div>
+
+  <footer class="account">
+    <p>Signed in as <strong id="account-id"></strong></p>
+    <button type="button" id="signout" class="link">Sign out</button>
+  </footer>
+</main>
+
+<section id="gate" class="gate" hidden>
+  <header class="masthead">
+    <p class="eyebrow">Professor Grant Horner&rsquo;s</p>
+    <h1>Bible Reading System</h1>
+    <p class="blurb">Ten chapters a day, ten lists, each moving at its own pace.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-signin" class="tab" aria-selected="true">I have an ID</button>
+    <button type="button" role="tab" id="tab-signup" class="tab" aria-selected="false">Start fresh</button>
+  </div>
+
+  <form id="form-signin" class="card form" autocomplete="on">
+    <label for="signin-id">Your ID</label>
+    <input id="signin-id" name="username" type="text" inputmode="latin" autocapitalize="none"
+           autocorrect="off" spellcheck="false" placeholder="k7m2-q4xp" required>
+    <label for="signin-pass">Passphrase</label>
+    <input id="signin-pass" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit" class="primary">Sign in</button>
+    <p class="error" id="signin-error" role="alert" hidden></p>
+  </form>
+
+  <form id="form-signup" class="card form" hidden autocomplete="on">
+    <label for="signup-pass">Choose a passphrase</label>
+    <input id="signup-pass" name="new-password" type="password" autocomplete="new-password"
+           minlength="8" required>
+    <p class="hint">At least 8 characters. We will generate your ID.</p>
+    <div id="turnstile"></div>
+    <button type="submit" class="primary">Create my ID</button>
+    <p class="error" id="signup-error" role="alert" hidden></p>
+    <p class="warning">
+      No email, no name, no recovery. If you lose your ID or passphrase, the
+      data behind them is gone for good.
+    </p>
+  </form>
+</section>
+
+<div id="issued" class="issued" hidden>
+  <div class="card">
+    <h2>Write this down</h2>
+    <p class="issued-id" id="issued-id"></p>
+    <p>
+      This is the only way back to your reading positions. There is no reset
+      and no recovery. Store it in your password manager now.
+    </p>
+    <button type="button" id="issued-copy" class="ghost">Copy ID</button>
+    <button type="button" id="issued-ack" class="primary">I have saved it</button>
+  </div>
+</div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
