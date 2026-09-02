@@ -46,7 +46,8 @@ CSS and ES modules, served straight from `public/`.
 ```
 public/        the app: HTML, CSS, one ES module, PWA manifest, service worker
 src/bible.js   the ten lists, chapter counts, and all position arithmetic
-src/auth.js    ID generation, PBKDF2 hashing, sessions, throttling, Turnstile
+src/auth.js    ID generation, PBKDF2 hashing, sessions, throttling
+src/turnstile.js  siteverify validation of the signup challenge
 src/index.js   API routes
 schema.sql     D1 schema
 scripts/       writes wrangler.generated.jsonc with the D1 id from the environment
@@ -70,7 +71,7 @@ You need a Cloudflare account. Everything below fits the free tier.
    The `database_id` it prints is not committed. Add it as a repository secret
    named `CLOUDFLARE_D1_DATABASE_ID` (Settings → Secrets and variables →
    Actions), and keep a copy for your own use — see
-   [The generated config](#the-generated-config) below.
+   [Deployment values](#deployment-values) below.
 
 3. **Apply the schema.** The local database is keyed by name, so it needs
    nothing extra; the remote one needs the id.
@@ -88,45 +89,109 @@ You need a Cloudflare account. Everything below fits the free tier.
    ```
    Or skip this entirely and let the merge to `main` deploy it.
 
-5. **Point your domain at it** (optional). Add the hostname as a DNS record in
-   Cloudflare, then uncomment the `routes` block at the bottom of
-   `wrangler.jsonc` and set your hostname. Without it the app is served on
-   `horner-tracker.<your-subdomain>.workers.dev`.
+5. **Set the serving hostname** (optional). Add it as a repository secret
+   named `APP_HOSTNAME`, as a bare hostname with no scheme or path. It is a
+   `custom_domain` route, so wrangler creates the DNS record and orders the
+   certificate on deploy — there is nothing to add by hand. The zone must be
+   active on the same Cloudflare account, and the certificate usually takes a
+   few minutes.
 
-6. **Turn on Turnstile** (optional but recommended, since signup is open to
-   anyone who finds the URL). Create a Turnstile widget in the Cloudflare
-   dashboard, put the site key in `vars.TURNSTILE_SITE_KEY` in
-   `wrangler.jsonc`, then:
+   Without `APP_HOSTNAME` the route is dropped and the Worker is served on its
+   `workers.dev` URL. That URL stays live alongside a custom domain too, which
+   helps while a certificate issues; once the domain works, adding
+   `"workers_dev": false` to `wrangler.jsonc` leaves only one way in.
+
+6. **Turn on Turnstile** (optional). Add the widget's site key as a repository
+   secret named `TURNSTILE_SITE_KEY`, then set the matching secret on the
+   Worker, which requires the Worker to exist, so deploy first:
    ```bash
    wrangler secret put TURNSTILE_SECRET
    ```
-   With no secret configured the app runs unchallenged; the per-IP throttle
-   applies either way.
+   Then check the widget's **Hostname management** in the Turnstile dashboard
+   lists every hostname the app is served on, the `workers.dev` one included
+   while it is in use. A token solved on a hostname the app is not serving is
+   refused, so a missing entry shows up as every signup failing verification. A token solved on a hostname the
+   app is not serving is refused, so a missing entry here shows up as every
+   signup failing verification.
 
-### The generated config
+   With a site key set, signup will not proceed unless the token verifies. If
+   the Worker secret is missing, signup returns 503 rather than quietly
+   accepting unverified requests — leaving `TURNSTILE_SITE_KEY` unset is the
+   only way to turn the challenge off.
 
-`wrangler.jsonc` is committed with a `D1_DATABASE_ID_FROM_SECRET` placeholder
-where the database id would normally sit. `npm run config` reads the real id
-from the `D1_DATABASE_ID` environment variable and writes
-`wrangler.generated.jsonc`, which is gitignored and is what deploys and remote
-D1 commands are pointed at with `-c`.
+### Turnstile
 
-Generating a second file rather than rewriting the tracked one means the id
-cannot end up in a commit by accident. `wrangler dev` needs none of this: the
-local database is keyed by name, so the placeholder is fine.
+Signup is challenged by Turnstile; nothing else is. The client renders the
+widget explicitly with `action: "signup"`, and the Worker checks three things
+about the siteverify response, not just one:
+
+| Check | Why |
+| ----- | --- |
+| `success` | The challenge was actually solved |
+| `action` | The token came from this form, not some other widget on the account |
+| `hostname` | The token was solved on a host this deployment serves |
+
+The hostname check matters because widgets commonly allow `localhost` for
+development. Without it, a token solved locally could be spent against
+production. `TURNSTILE_HOSTNAMES` overrides the allowed list; left empty it is
+the host serving the request, which is right for every deployment and cannot
+go stale.
+
+Tokens are single use and expire after five minutes. A replayed token comes
+back from siteverify as `timeout-or-duplicate` and is refused.
+
+Failures close rather than open. An unreachable siteverify, a non-200 from it,
+a request that takes more than ten seconds, or a missing secret all reject the
+signup.
+
+To run locally without a challenge:
+
+```bash
+npx wrangler dev --var TURNSTILE_SITE_KEY:      # switched off entirely
+```
+
+Or put a secret in `.dev.vars` (gitignored) to exercise the real path.
+
+### Deployment values
+
+Nothing that identifies a particular deployment is committed. `wrangler.jsonc`
+carries placeholders, and `npm run config` fills them from the environment into
+`wrangler.generated.jsonc` — gitignored, and what deploys and remote D1
+commands are pointed at with `-c`.
+
+| Variable | Required | Missing means |
+| -------- | -------- | ------------- |
+| `D1_DATABASE_ID` | Yes | The script refuses to write a config |
+| `APP_HOSTNAME` | No | The route is dropped; served on `workers.dev` |
+| `TURNSTILE_SITE_KEY` | No | The signup challenge is switched off |
+
+Generating a second file rather than rewriting the tracked one means those
+values cannot end up in a commit by accident. Each is checked for shape, and a
+placeholder that somehow survives aborts the run, so a misconfigured secret
+fails at this step rather than reaching Cloudflare.
+
+`wrangler dev` needs none of this: the local database is keyed by name, so the
+placeholders are fine.
 
 ### Continuous deployment
 
 `.github/workflows/deploy.yml` runs the tests on every pull request, and
-deploys on pushes to `main`. Two repository secrets are needed:
+deploys on pushes to `main`. The repository secrets it reads:
 
 | Secret | What it is |
 | ------ | ---------- |
 | `CLOUDFLARE_API_TOKEN` | An API token with the *Edit Cloudflare Workers* template permissions |
 | `CLOUDFLARE_D1_DATABASE_ID` | The id printed by `wrangler d1 create` |
+| `APP_HOSTNAME` | The hostname to serve on, if any |
+| `TURNSTILE_SITE_KEY` | The Turnstile widget's site key, if used |
 
-The deploy job generates the wrangler config from the second one before
-calling wrangler.
+The deploy job generates the wrangler config from these before calling
+wrangler.
+
+Note that a hostname is not really a secret: the moment a certificate is
+issued for it, it is published to the public Certificate Transparency logs.
+Keeping it out of the repository decouples this code from any particular
+deployment; it does not make the address private.
 
 ## Working on it locally
 
@@ -158,9 +223,13 @@ whole loop.
 - Sign-in is limited to 10 attempts per IP per 15 minutes, and signup to 5 per
   IP per hour. A sign-in for an unknown ID still performs the hash, so a
   missing ID and a wrong passphrase take a similar amount of time.
-- The D1 database id is held as a repository secret rather than committed. It
-  is an identifier rather than a credential — useless without the API token —
-  but there is no reason for it to sit in a public repository.
+- Signup is protected by Turnstile, verified server-side on `success`, `action`
+  and `hostname`. Verification failures — including an unreachable siteverify —
+  reject the signup rather than letting it through.
+- The database id, serving hostname and Turnstile site key are held as
+  repository secrets rather than committed. None is a credential, and a
+  hostname is published to Certificate Transparency logs regardless, but
+  keeping them out means this code says nothing about where it runs.
 - **There is no account recovery.** Losing the ID and passphrase means losing
   the positions behind them, by design — there is no email or any other
   identifier on file to recover through.

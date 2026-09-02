@@ -150,20 +150,3 @@ export async function recordAttempt(env, bucket) {
     env.DB.prepare('DELETE FROM throttle WHERE at < ?').bind(now - 24 * 60 * 60 * 1000),
   ]);
 }
-
-// Turnstile is optional: with no secret configured the app still runs, just
-// without challenge protection on signup.
-export async function verifyTurnstile(env, token, ip) {
-  if (!env.TURNSTILE_SECRET) return true;
-  if (!token) return false;
-  const body = new FormData();
-  body.append('secret', env.TURNSTILE_SECRET);
-  body.append('response', token);
-  if (ip !== 'unknown') body.append('remoteip', ip);
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    body,
-  });
-  const result = await response.json();
-  return result.success === true;
-}
