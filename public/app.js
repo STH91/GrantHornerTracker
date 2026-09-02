@@ -2,7 +2,9 @@ const el = (id) => document.getElementById(id);
 
 let account = null;
 let lists = [];
-let turnstileWidget = null;
+// Turnstile state. The widget can only be rendered once its container is
+// visible, so loading the script and rendering the widget are separate steps.
+const turnstile = { siteKey: '', scriptReady: false, widget: null, token: '' };
 
 // --- API --------------------------------------------------------------------
 
@@ -125,7 +127,7 @@ function showApp() {
 function showGate() {
   el('app').hidden = true;
   el('gate').hidden = false;
-  setUpTurnstile();
+  loadTurnstile();
 }
 
 // --- Actions ----------------------------------------------------------------
@@ -168,7 +170,10 @@ function selectTab(which) {
 }
 
 el('tab-signin').addEventListener('click', () => selectTab('signin'));
-el('tab-signup').addEventListener('click', () => selectTab('signup'));
+el('tab-signup').addEventListener('click', () => {
+  selectTab('signup');
+  renderTurnstile();
+});
 
 function showError(id, message) {
   const node = el(id);
@@ -203,7 +208,14 @@ el('form-signup').addEventListener('submit', async (event) => {
   const button = event.target.querySelector('button[type="submit"]');
   button.disabled = true;
   try {
-    const token = turnstileWidget !== null ? window.turnstile.getResponse(turnstileWidget) : undefined;
+    let token;
+    if (turnstile.siteKey) {
+      token = turnstile.token || (turnstile.widget !== null ? window.turnstile.getResponse(turnstile.widget) : '');
+      if (!token) {
+        showError('signup-error', 'Still waiting on the verification challenge. Give it a moment and try again.');
+        return;
+      }
+    }
     const result = await api('/api/signup', {
       method: 'POST',
       body: { passphrase: el('signup-pass').value, turnstileToken: token },
@@ -216,7 +228,9 @@ el('form-signup').addEventListener('submit', async (event) => {
     showApp();
   } catch (error) {
     showError('signup-error', error.message);
-    if (turnstileWidget !== null) window.turnstile.reset(turnstileWidget);
+    // Tokens are single use, so a retry needs a fresh challenge.
+    turnstile.token = '';
+    if (turnstile.widget !== null) window.turnstile.reset(turnstile.widget);
   } finally {
     button.disabled = false;
   }
@@ -234,24 +248,53 @@ el('issued-copy').addEventListener('click', async () => {
 el('issued-ack').addEventListener('click', () => { el('issued').hidden = true; });
 
 // Turnstile is only wired up when a site key is configured on the Worker.
-async function setUpTurnstile() {
-  if (turnstileWidget !== null || window.turnstileLoading) return;
+async function loadTurnstile() {
+  if (turnstile.siteKey || window.turnstileLoading) return;
   const { turnstileSiteKey } = await api('/api/config').catch(() => ({}));
   if (!turnstileSiteKey) return;
+  turnstile.siteKey = turnstileSiteKey;
   window.turnstileLoading = true;
   window.onTurnstileReady = () => {
-    turnstileWidget = window.turnstile.render('#turnstile', {
-      sitekey: turnstileSiteKey,
-      // The server requires this to match, so a token solved against some
-      // other widget cannot be spent here.
-      action: 'signup',
-      theme: 'auto',
-    });
+    turnstile.scriptReady = true;
+    renderTurnstile();
   };
   const script = document.createElement('script');
   script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileReady';
   script.async = true;
+  script.addEventListener('error', () => {
+    showError('signup-error', 'The verification challenge could not be loaded. Check your connection and reload.');
+  });
   document.head.append(script);
+}
+
+// Rendering into a hidden container leaves the challenge unable to run, and so
+// never produces a token. Only render once the signup form is actually shown.
+function renderTurnstile() {
+  if (!turnstile.scriptReady || turnstile.widget !== null) return;
+  if (el('form-signup').hidden) return;
+  try {
+    turnstile.widget = window.turnstile.render('#turnstile', {
+      sitekey: turnstile.siteKey,
+      // The server requires this to match, so a token solved against some
+      // other widget cannot be spent here.
+      action: 'signup',
+      theme: 'auto',
+      callback: (token) => {
+        turnstile.token = token;
+        showError('signup-error', '');
+      },
+      'expired-callback': () => { turnstile.token = ''; },
+      'error-callback': (code) => {
+        turnstile.token = '';
+        // Surfacing the code matters: a hostname missing from the widget's
+        // allow list looks identical to a network problem without it.
+        showError('signup-error', `Verification failed to load${code ? ` (${code})` : ''}. Reload the page and try again.`);
+        return true;
+      },
+    });
+  } catch (error) {
+    showError('signup-error', 'Verification could not start. Reload the page and try again.');
+  }
 }
 
 // --- Boot -------------------------------------------------------------------
