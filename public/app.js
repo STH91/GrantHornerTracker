@@ -273,6 +273,9 @@ function renderTurnstile() {
   if (!turnstile.scriptReady || turnstile.widget !== null) return;
   if (el('form-signup').hidden) return;
   try {
+    // A previous attempt that threw part way can leave debris behind, and
+    // rendering into a container that already holds a widget throws again.
+    el('turnstile').replaceChildren();
     turnstile.widget = window.turnstile.render('#turnstile', {
       sitekey: turnstile.siteKey,
       // The server requires this to match, so a token solved against some
@@ -293,7 +296,11 @@ function renderTurnstile() {
       },
     });
   } catch (error) {
-    showError('signup-error', 'Verification could not start. Reload the page and try again.');
+    // Turnstile's own message names the cause — usually a site key that does
+    // not match this hostname. Losing it leaves nothing to act on.
+    console.error('Turnstile render failed:', error);
+    const detail = error && error.message ? `: ${error.message}` : '';
+    showError('signup-error', `Verification could not start${detail}. Reload the page and try again.`);
   }
 }
 
