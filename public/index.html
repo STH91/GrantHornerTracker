@@ -58,7 +58,10 @@
     <input id="signup-pass" name="new-password" type="password" autocomplete="new-password"
            minlength="8" required>
     <p class="hint">At least 8 characters. We will generate your ID.</p>
-    <div id="turnstile"></div>
+    <!-- Not id="turnstile": an element id becomes a window property, and
+         Cloudflare's script treats a truthy window.turnstile as "already
+         loaded" and refuses to install its API. -->
+    <div id="turnstile-widget"></div>
     <button type="submit" class="primary">Create my ID</button>
     <p class="error" id="signup-error" role="alert" hidden></p>
     <p class="warning">

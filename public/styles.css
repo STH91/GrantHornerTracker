@@ -218,7 +218,7 @@ button { font: inherit; cursor: pointer; }
 .error { color: var(--danger); font-size: 0.9rem; margin: 0.6rem 0 0; }
 .warning { font-size: 0.82rem; color: var(--muted); margin: 0.9rem 0 0; border-top: 1px solid var(--rule); padding-top: 0.9rem; }
 
-#turnstile:not(:empty) { margin-bottom: 0.75rem; }
+#turnstile-widget:not(:empty) { margin-bottom: 0.75rem; }
 
 /* --- Issued ID ----------------------------------------------------------- */
 
