@@ -6,7 +6,8 @@
   "description": "A tracker for Professor Grant Horner's ten-list Bible reading system.",
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
+    "config": "node scripts/write-wrangler-config.mjs",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "npm run config && wrangler deploy -c wrangler.generated.jsonc"
   }
 }

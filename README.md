@@ -49,6 +49,7 @@ src/bible.js   the ten lists, chapter counts, and all position arithmetic
 src/auth.js    ID generation, PBKDF2 hashing, sessions, throttling, Turnstile
 src/index.js   API routes
 schema.sql     D1 schema
+scripts/       writes wrangler.generated.jsonc with the D1 id from the environment
 test/          node:test coverage of the position arithmetic
 ```
 
@@ -62,22 +63,30 @@ You need a Cloudflare account. Everything below fits the free tier.
    wrangler login
    ```
 
-2. **Create the database** and copy the printed `database_id` into
-   `wrangler.jsonc`, replacing `REPLACE_WITH_YOUR_D1_DATABASE_ID`.
+2. **Create the database.**
    ```bash
    wrangler d1 create horner-tracker
    ```
+   The `database_id` it prints is not committed. Add it as a repository secret
+   named `CLOUDFLARE_D1_DATABASE_ID` (Settings → Secrets and variables →
+   Actions), and keep a copy for your own use — see
+   [The generated config](#the-generated-config) below.
 
-3. **Apply the schema**, locally and remotely.
+3. **Apply the schema.** The local database is keyed by name, so it needs
+   nothing extra; the remote one needs the id.
    ```bash
-   wrangler d1 execute horner-tracker --local  --file=./schema.sql
-   wrangler d1 execute horner-tracker --remote --file=./schema.sql
+   wrangler d1 execute horner-tracker --local --file=./schema.sql
+
+   export D1_DATABASE_ID=<the id from step 2>
+   npm run config
+   wrangler d1 execute horner-tracker --remote -c wrangler.generated.jsonc --file=./schema.sql
    ```
 
-4. **Deploy.**
+4. **Deploy.** With `D1_DATABASE_ID` still exported:
    ```bash
-   wrangler deploy
+   npm run deploy
    ```
+   Or skip this entirely and let the merge to `main` deploy it.
 
 5. **Point your domain at it** (optional). Add the hostname as a DNS record in
    Cloudflare, then uncomment the `routes` block at the bottom of
@@ -94,17 +103,35 @@ You need a Cloudflare account. Everything below fits the free tier.
    With no secret configured the app runs unchallenged; the per-IP throttle
    applies either way.
 
+### The generated config
+
+`wrangler.jsonc` is committed with a `D1_DATABASE_ID_FROM_SECRET` placeholder
+where the database id would normally sit. `npm run config` reads the real id
+from the `D1_DATABASE_ID` environment variable and writes
+`wrangler.generated.jsonc`, which is gitignored and is what deploys and remote
+D1 commands are pointed at with `-c`.
+
+Generating a second file rather than rewriting the tracked one means the id
+cannot end up in a commit by accident. `wrangler dev` needs none of this: the
+local database is keyed by name, so the placeholder is fine.
+
 ### Continuous deployment
 
-`.github/workflows/deploy.yml` runs the tests on every push, and deploys on
-pushes to `main`. Add a repository secret named `CLOUDFLARE_API_TOKEN` holding
-an API token with the *Edit Cloudflare Workers* template permissions. Pushes to
-other branches run the tests only.
+`.github/workflows/deploy.yml` runs the tests on every pull request, and
+deploys on pushes to `main`. Two repository secrets are needed:
+
+| Secret | What it is |
+| ------ | ---------- |
+| `CLOUDFLARE_API_TOKEN` | An API token with the *Edit Cloudflare Workers* template permissions |
+| `CLOUDFLARE_D1_DATABASE_ID` | The id printed by `wrangler d1 create` |
+
+The deploy job generates the wrangler config from the second one before
+calling wrangler.
 
 ## Working on it locally
 
 ```bash
-wrangler dev      # http://localhost:8787, against the local D1 copy
+npm run dev       # http://localhost:8787, against the local D1 copy
 npm test          # position arithmetic
 ```
 
@@ -131,6 +158,9 @@ whole loop.
 - Sign-in is limited to 10 attempts per IP per 15 minutes, and signup to 5 per
   IP per hour. A sign-in for an unknown ID still performs the hash, so a
   missing ID and a wrong passphrase take a similar amount of time.
+- The D1 database id is held as a repository secret rather than committed. It
+  is an identifier rather than a credential — useless without the API token —
+  but there is no reason for it to sit in a public repository.
 - **There is no account recovery.** Losing the ID and passphrase means losing
   the positions behind them, by design — there is no email or any other
   identifier on file to recover through.
