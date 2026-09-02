@@ -21,7 +21,9 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Manual dispatch on main deploys too, so a failed deploy can be retried
+    # against current main rather than by re-running an older run's commit.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +38,38 @@ jobs:
           APP_HOSTNAME: ${{ secrets.APP_HOSTNAME }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
         run: npm run config
+      # wrangler reports a bad token as an opaque failure against /memberships.
+      # Check it here instead, and say which of the likely causes it is.
+      - name: Check the Cloudflare API token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN is empty."
+            echo "The secret must sit under Settings -> Secrets and variables -> Actions"
+            echo "-> Repository secrets, spelled exactly CLOUDFLARE_API_TOKEN."
+            echo "Environment secrets are not visible to this job, which declares no environment."
+            exit 1
+          fi
+          stripped=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
+          if [ "${#stripped}" -ne "${#CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN contains whitespace. Re-paste it with no trailing newline."
+            exit 1
+          fi
+          status=$(curl -sS -o /tmp/cf-verify.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            https://api.cloudflare.com/client/v4/user/tokens/verify)
+          if [ "$status" = "200" ]; then
+            echo "Token verified by Cloudflare."
+          else
+            echo "Cloudflare rejected the token (HTTP $status). Its response:"
+            cat /tmp/cf-verify.json
+            echo
+            echo "A Global API Key will fail here: this needs an API token, from"
+            echo "My Profile -> API Tokens -> Create Token -> Edit Cloudflare Workers."
+            exit 1
+          fi
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
