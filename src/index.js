@@ -2,8 +2,9 @@ import { LISTS, LIST_COUNT, advance, rewind, describe } from './bible.js';
 import {
   generateId, normaliseId, hashPassphrase, verifyPassphrase, iterationCount,
   createSession, authenticate, destroySession, sessionCookie, clearedCookie,
-  clientIp, isThrottled, recordAttempt, verifyTurnstile,
+  clientIp, isThrottled, recordAttempt,
 } from './auth.js';
+import { verify as verifyTurnstile, isConfigured as turnstileConfigured } from './turnstile.js';
 
 const MIN_PASSPHRASE = 8;
 const MAX_PASSPHRASE = 200;
@@ -118,9 +119,10 @@ async function signUp(env, request) {
     return fail(400, `Passphrase must be at least ${MIN_PASSPHRASE} characters.`);
   }
   await recordAttempt(env, `signup:${ip}`);
-  if (!(await verifyTurnstile(env, turnstileToken, ip))) {
-    return fail(400, 'Verification failed. Reload the page and try again.');
-  }
+
+  // Nothing is created until the challenge has been checked.
+  const rejection = await verifyTurnstile(env, request, turnstileToken);
+  if (rejection) return fail(rejection.status, rejection.message);
 
   const passHash = await hashPassphrase(passphrase, iterationCount(env));
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -172,7 +174,7 @@ async function handleApi(request, env, path) {
   const method = request.method;
 
   if (path === '/api/config' && method === 'GET') {
-    return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '' });
+    return json({ turnstileSiteKey: turnstileConfigured(env) ? env.TURNSTILE_SITE_KEY : '' });
   }
   if (path === '/api/signup' && method === 'POST') return signUp(env, request);
   if (path === '/api/signin' && method === 'POST') return signIn(env, request);

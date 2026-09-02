@@ -240,7 +240,13 @@ async function setUpTurnstile() {
   if (!turnstileSiteKey) return;
   window.turnstileLoading = true;
   window.onTurnstileReady = () => {
-    turnstileWidget = window.turnstile.render('#turnstile', { sitekey: turnstileSiteKey });
+    turnstileWidget = window.turnstile.render('#turnstile', {
+      sitekey: turnstileSiteKey,
+      // The server requires this to match, so a token solved against some
+      // other widget cannot be spent here.
+      action: 'signup',
+      theme: 'auto',
+    });
   };
   const script = document.createElement('script');
   script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileReady';

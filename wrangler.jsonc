@@ -12,30 +12,37 @@
 
   "observability": { "enabled": true },
 
+  // The placeholders below are injected at deploy time by
+  // scripts/write-wrangler-config.mjs, so nothing committed here identifies a
+  // particular deployment. See "Deployment values" in the README.
+
   "vars": {
     // PBKDF2 cost. The Workers free plan allows 10ms of CPU per request, and
     // 12,000 iterations measures around 6.4ms. Workers Paid lifts the ceiling
     // to 30s, so set this to 310000 there. Raising it is safe at any time:
     // every stored hash records the count it was created with.
     "PBKDF2_ITERATIONS": "12000",
-    // Public Turnstile site key. Leave empty to run without a challenge.
-    // The matching secret is set with: wrangler secret put TURNSTILE_SECRET
-    "TURNSTILE_SITE_KEY": ""
+    // Public Turnstile site key. Empty switches the challenge off entirely;
+    // set, signup refuses to proceed unless the token verifies, so a missing
+    // secret fails closed. The matching secret is never in the repository:
+    // wrangler secret put TURNSTILE_SECRET
+    "TURNSTILE_SITE_KEY": "TURNSTILE_SITE_KEY_FROM_SECRET",
+    // Hostnames a solved challenge is accepted from, comma separated. Empty
+    // means the host serving the request, which is correct per deployment and
+    // stops a token solved on localhost being spent against production.
+    "TURNSTILE_HOSTNAMES": ""
   },
+
+  // Serving hostname. custom_domain means wrangler creates the DNS record and
+  // orders the certificate on deploy. This whole entry is dropped when no
+  // hostname is supplied, leaving the Worker on its workers.dev URL.
+  "routes": [{ "pattern": "APP_HOSTNAME_FROM_SECRET", "custom_domain": true }],
 
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "horner-tracker",
-      // Filled in at deploy time by scripts/write-wrangler-config.mjs, which
-      // reads the id from the D1_DATABASE_ID environment variable. The id is
-      // held as a repository secret rather than committed, so this file keeps
-      // a placeholder and wrangler is pointed at the generated config.
       "database_id": "D1_DATABASE_ID_FROM_SECRET"
     }
   ]
-
-  // To serve on your own hostname, add the DNS record in Cloudflare, then
-  // uncomment and edit:
-  // ,"routes": [{ "pattern": "horner.example.com", "custom_domain": true }]
 }

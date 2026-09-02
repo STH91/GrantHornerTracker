@@ -54,11 +54,23 @@ records the count it was created with, so the value can be raised on Workers
 Paid without invalidating existing accounts. Random IDs and per-IP rate limits
 carry the rest of the weight.
 
-**The D1 database id is not committed.** It is an identifier rather than a
-credential, but it is kept as a repository secret anyway. `npm run config`
-writes it into a gitignored `wrangler.generated.jsonc` that deploys and remote
-D1 commands use, so the tracked config is never rewritten and the id cannot be
-committed by accident.
+**Turnstile fails closed.** Embedding the widget protects nothing on its own,
+so the token is verified server-side before an account exists, and on `action`
+and `hostname` as well as `success` — a token solved against another widget, or
+on `localhost`, is refused. The only way to run without a challenge is to clear
+the site key; a missing secret returns 503 rather than accepting unverified
+signups, because a security control that silently switches itself off when
+misconfigured is worse than none.
+
+**Nothing identifying a deployment is committed.** The database id, serving
+hostname and Turnstile site key are all repository secrets. None is a
+credential — and a hostname reaches the public Certificate Transparency logs
+the moment its certificate is issued — but the repository is public, and this
+code should say nothing about where any particular copy of it runs.
+`npm run config` fills them into a gitignored `wrangler.generated.jsonc` that
+deploys use, so the tracked config is never rewritten and the values cannot be
+committed by accident. Absent values degrade rather than break: no hostname
+serves on workers.dev, no site key runs without the challenge.
 
 ## If it grows
 
