@@ -275,8 +275,8 @@ function renderTurnstile() {
   try {
     // A previous attempt that threw part way can leave debris behind, and
     // rendering into a container that already holds a widget throws again.
-    el('turnstile').replaceChildren();
-    turnstile.widget = window.turnstile.render('#turnstile', {
+    el('turnstile-widget').replaceChildren();
+    turnstile.widget = window.turnstile.render('#turnstile-widget', {
       sitekey: turnstile.siteKey,
       // The server requires this to match, so a token solved against some
       // other widget cannot be spent here.
