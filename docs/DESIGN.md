@@ -54,6 +54,12 @@ records the count it was created with, so the value can be raised on Workers
 Paid without invalidating existing accounts. Random IDs and per-IP rate limits
 carry the rest of the weight.
 
+**The D1 database id is not committed.** It is an identifier rather than a
+credential, but it is kept as a repository secret anyway. `npm run config`
+writes it into a gitignored `wrangler.generated.jsonc` that deploys and remote
+D1 commands use, so the tracked config is never rewritten and the id cannot be
+committed by accident.
+
 ## If it grows
 
 The read log is the seam. Streaks, "what did I read yesterday", chapters per

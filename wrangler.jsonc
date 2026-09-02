@@ -27,8 +27,11 @@
     {
       "binding": "DB",
       "database_name": "horner-tracker",
-      // Replace with the id printed by: wrangler d1 create horner-tracker
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+      // Filled in at deploy time by scripts/write-wrangler-config.mjs, which
+      // reads the id from the D1_DATABASE_ID environment variable. The id is
+      // held as a repository secret rather than committed, so this file keeps
+      // a placeholder and wrangler is pointed at the generated config.
+      "database_id": "D1_DATABASE_ID_FROM_SECRET"
     }
   ]
 
