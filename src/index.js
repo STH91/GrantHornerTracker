@@ -118,11 +118,14 @@ async function signUp(env, request) {
   if (!validPassphrase(passphrase)) {
     return fail(400, `Passphrase must be at least ${MIN_PASSPHRASE} characters.`);
   }
-  await recordAttempt(env, `signup:${ip}`);
-
   // Nothing is created until the challenge has been checked.
   const rejection = await verifyTurnstile(env, request, turnstileToken);
-  if (rejection) return fail(rejection.status, rejection.message);
+  if (rejection) {
+    // A failed challenge spends the visitor's quota; a fault on our side must
+    // not, or a misconfiguration locks out the very people it should admit.
+    if (rejection.status !== 503) await recordAttempt(env, `signup:${ip}`);
+    return fail(rejection.status, rejection.message);
+  }
 
   const passHash = await hashPassphrase(passphrase, iterationCount(env));
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -141,6 +144,8 @@ async function signUp(env, request) {
       throw error;
     }
     const token = await createSession(env, id);
+    // The limit is on IDs created, so it is spent here, once one exists.
+    await recordAttempt(env, `signup:${ip}`);
     return json({ id, lists: await loadState(env, id) }, { headers: { 'Set-Cookie': sessionCookie(token) } });
   }
   return fail(503, 'Could not allocate an ID. Try again.');
