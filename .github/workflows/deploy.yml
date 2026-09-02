@@ -40,4 +40,10 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Pinned deliberately. The action otherwise installs its own default,
+          # which was wrangler 3.90.0 — a version that ignores the `assets`
+          # config silently, with no warning, deploying a Worker with no static
+          # files behind it. Bump this only alongside a dry run that still
+          # reports the ASSETS binding.
+          wranglerVersion: '4.128.0'
           command: deploy -c wrangler.generated.jsonc
